@@ -4,6 +4,10 @@ import speech_recognition as sr
 import pyttsx3
 import keyboard
 import subprocess
+import time
+import ctypes
+import sys
+import os
 
 # ===================== COMANDOS ===================== #
 comandos = {
@@ -11,12 +15,14 @@ comandos = {
     "abrir notas":          r"C:\Users\Gc\AppData\Local\Programs\Obsidian\Obsidian.exe",
     "abrir ópera":          r'"C:\Users\Gc\AppData\Local\Programs\Opera GX\opera.exe"',
     "abrir fifa":           r'"C:\Users\Gc\Desktop\FIFA Mod Manager.url"',
+    "abrir spotify":        r'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
     "reiniciar cerebro":    None
 }
 
 # ===================== VOZ ===================== #
 tts_engine = pyttsx3.init()
-tts_engine.setProperty('voice',
+tts_engine.setProperty(
+    'voice',
     'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_ES-MX_SABINA_11.0'
 )
 tts_engine.setProperty('rate', 120)
@@ -31,7 +37,6 @@ def hablar(texto):
     tts_engine.runAndWait()
 
 # ===================== PRE-CALENTAR AUDIO ===================== #
-# Graba 0.1 s para que sounddevice abra el stream
 _sd_sr = 16000
 _sd_ch = 1
 try:
@@ -58,8 +63,16 @@ def escuchar_comando(duration=3, fs=_sd_sr):
         hablar("Error de servicio.")
     return None
 
+# ===================== MEDIA KEYS ===================== #
+def play_pause_media():
+    VK_MEDIA_PLAY_PAUSE = 0xB3
+    # key down
+    ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 0, 0)
+    time.sleep(0.1)
+    # key up
+    ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 2, 0)
+
 # ===================== EJECUCIÓN ===================== #
-import sys, os
 def ejecutar_comando(cmd):
     if cmd and "reiniciar cerebro" in cmd:
         hablar("Reiniciando Cerebro.")
@@ -70,6 +83,10 @@ def ejecutar_comando(cmd):
         if action and key in (cmd or ""):
             hablar(f"Ejecutando {key}.")
             subprocess.run(action, shell=True)
+            # Si abrimos Spotify, forzamos play
+            if key == "abrir spotify":
+                time.sleep(2)  # espera a que Spotify abra
+                play_pause_media()
             return
 
     hablar("Comando no reconocido.")
