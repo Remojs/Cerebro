@@ -28,102 +28,42 @@ comandos = {
 
 # —————— 3) Funciones de TTS ——————
 def listar_voces():
-    """Imprime todas las voces disponibles para diagnóstico."""
     engine = pyttsx3.init()
-    voices = engine.getProperty('voices')
-    print("\n=== VOCES DISPONIBLES ===")
-    for i, v in enumerate(voices):
-        print(f"{i}. ID: {v.id}")
-        print(f"   Nombre: {v.name}")
-        print(f"   Idiomas: {v.languages}")
-        print(f"   Género: {v.gender}")
-        print("------------------------")
-    return voices
-
-def crear_tts():
-    engine = pyttsx3.init()
-    # Diagnóstico - Comprobar propiedades iniciales
-    print(f"Volumen inicial: {engine.getProperty('volume')}")
-    print(f"Velocidad inicial: {engine.getProperty('rate')}")
-    
-    # Listar voces para diagnostico
-    voices = engine.getProperty('voices')
-    voz_seleccionada = None
-    
-    # Intento 1: Buscar voces en español
-    for v in voices:
-        name = v.name.lower()
-        vid = v.id.lower()
-        if "spanish" in name or "español" in name or "es-" in vid:
-            voz_seleccionada = v.id
-            print(f"Seleccionada voz española: {v.name}")
-            break
-    
-    # Intento 2: Si no encontró voz española, usar la primera disponible
-    if not voz_seleccionada and voices:
-        voz_seleccionada = voices[0].id
-        print(f"No se encontró voz española, usando: {voices[0].name}")
-    
-    # Configurar la voz
-    if voz_seleccionada:
-        try:
-            engine.setProperty('voice', voz_seleccionada)
-            print(f"Voz configurada: {voz_seleccionada}")
-        except Exception as e:
-            print(f"Error al configurar voz: {e}")
-    
-    # Configuración adicional
-    engine.setProperty('rate', 120)
-    engine.setProperty('volume', 1.0)
-    return engine
+    return engine.getProperty('voices')
 
 def hablar(texto: str):
-    """Reinicializa el TTS cada vez para garantizar audio."""
+    """Intenta reproducir texto por voz de la manera más eficiente posible."""
     print(f"Cerebro: {texto}")
     try:
-        # Usar el driver sapi5 específicamente en Windows
-        engine = pyttsx3.init(driverName='sapi5')
-        engine.setProperty('rate', 120)
+        # Método directo y sencillo
+        engine = pyttsx3.init()
+        engine.setProperty('rate', 150)  # Un poco más rápido para mayor agilidad
         engine.setProperty('volume', 1.0)
         
-        # Intenta usar una voz específica conocida en español
-        try:
-            engine.setProperty('voice', 'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_ES-ES_HELENA_11.0')
-        except:
-            # Si falla, intenta el método normal
-            for v in engine.getProperty('voices'):
-                if "spanish" in v.name.lower() or "español" in v.name.lower():
-                    engine.setProperty('voice', v.id)
-                    break
-        
-        print("Intentando reproducir audio...")
+        # Intentar establecer una voz en español
+        voices = engine.getProperty('voices')
+        for voice in voices:
+            if "spanish" in voice.name.lower() or "español" in voice.name.lower():
+                engine.setProperty('voice', voice.id)
+                break
+                
+        # Reproducir
         engine.say(texto)
         engine.runAndWait()
-        print("Audio reproducido correctamente")
     except Exception as e:
-        print(f"ERROR DE VOZ: {e}")
-        # Intento alternativo con configuración mínima
-        try:
-            print("Intento alternativo de voz...")
-            simple_engine = pyttsx3.init()
-            simple_engine.say(texto)
-            simple_engine.runAndWait()
-        except Exception as e2:
-            print(f"ERROR FATAL DE VOZ: {e2}")
+        print(f"Error de voz: {e}")
+        
+# Probar voces disponibles (solo imprime en consola, no afecta la operación)
+try:
+    voices = listar_voces()
+    print(f"Voces disponibles: {len(voices)}")
+    if len(voices) > 0:
+        print(f"Primera voz: {voices[0].name}")
+except:
+    print("No se pudieron listar las voces")
 
 # Ejecutar diagnóstico de voces al inicio
-print("=== DIAGNÓSTICO DE SISTEMA DE VOZ ===")
-voces_disponibles = listar_voces()
-print(f"Total de voces disponibles: {len(voces_disponibles)}")
-
-# Precalentar TTS para evitar latencia
-try:
-    _tt = crear_tts()
-    _tt.say("Sistema activado")
-    _tt.runAndWait()
-    print("Precalentamiento de voz exitoso")
-except Exception as e:
-    print(f"Error en precalentamiento de voz: {e}")
+print("Iniciando asistente...")
 
 # —————— 4) Precalentar audio micro ——————
 _SR = 16000
@@ -134,7 +74,7 @@ except:
     pass
 
 # —————— 5) Grabación y reconocimiento ——————
-def grabar(segundos=3):
+def grabar(segundos=1.5):  # Reducido de 3 a 1.5 segundos
     return sd.rec(int(segundos * _SR), samplerate=_SR, channels=1, dtype='int16')
 
 def reconocer(audio_bytes):
@@ -145,27 +85,29 @@ def reconocer(audio_bytes):
     except sr.UnknownValueError:
         return None
     except sr.RequestError:
-        hablar("Error de servicio.")
+        print("Error de servicio de reconocimiento de voz.")
         return None
 
 # —————— 6) Modo Comando (F9) ——————
 def modo_comando():
-    hablar("Di tu comando.")
-    rec = grabar(3)
+    print("Escuchando comando...")
+    rec = grabar(1.5)  # Reducido a 1.5 segundos
     sd.wait()
     cmd = reconocer(rec.tobytes())
     if not cmd:
-        hablar("No te entendí.")
+        print("No se reconoció ningún comando")
         return
 
+    print(f"Comando reconocido: {cmd}")
+    
     if "reiniciar cerebro" in cmd:
-        hablar("Reiniciando Cerebro.")
+        print("Reiniciando Cerebro.")
         os.execl(sys.executable, sys.executable, *sys.argv)
         return
 
     for k, action in comandos.items():
         if action and k in cmd:
-            hablar(f"Ejecutando {k}.")
+            print(f"Ejecutando: {k}")
             subprocess.run(action, shell=True)
             if k == "abrir spotify":
                 time.sleep(2)
@@ -174,42 +116,43 @@ def modo_comando():
                 ctypes.windll.user32.keybd_event(0xB3, 0, 2, 0)
             return
 
-    hablar("Comando no reconocido.")
+    print("Comando no reconocido.")
 
 # —————— 7) Modo IA (F10) ——————
 def modo_ia():
     try:
-        hablar("¿Qué quieres preguntarle a la IA?")
-        rec = grabar(5)
+        hablar("¿Qué necesitas?")  # Mensaje corto y directo
+        rec = grabar(2)  # Reducido de 5 a 2 segundos
         sd.wait()
         pregunta = reconocer(rec.tobytes())
         if not pregunta:
-            hablar("No entendí tu pregunta.")
+            print("No se reconoció la pregunta")
             return
 
-        hablar("Pensando…")
-        # —> PROMPT EN ESPAÑOL
+        print(f"Procesando pregunta: {pregunta}")
+        
+        # Prompt simplificado
         prompt = (
             "Eres un asistente experto que siempre RESPONDE en español.\n"
             f"Usuario: {pregunta}\n"
             "IA:"
         )
-        print(f"Enviando pregunta a LLM: {pregunta}")
+        
         resp = llm(prompt, max_tokens=128)
         texto = resp['choices'][0]['text'].strip()
-        print(f"Respuesta recibida: {texto}")
+        
         if texto:
-            print("Intentando reproducir respuesta por voz...")
-            hablar(texto)
+            print(f"\nRespuesta IA: {texto}")
+            hablar(texto)  # Respuesta por voz
         else:
-            hablar("La IA no devolvió respuesta.")
+            print("No se obtuvo respuesta")
     except Exception as e:
-        print(f"ERROR EN MODO IA: {e}")
-        hablar("Ocurrió un error al procesar tu pregunta.")
+        print(f"Error: {e}")
 
 # —————— 8) Bucle de teclas ——————
-hablar("Listo. Pulsa F9 para comandos o F10 para IA.")
-print("CONTROLES: F9=Comandos, F10=IA, F8=Prueba de voz")
+print("Asistente listo. F9=Comandos, F10=IA")
+hablar("Listo")
+
 while True:
     evento = keyboard.read_event()
     if evento.event_type == keyboard.KEY_DOWN:
@@ -217,25 +160,3 @@ while True:
             modo_comando()
         elif evento.name == "f10":
             modo_ia()
-        elif evento.name == "f8":
-            # Prueba de voz con diferentes métodos
-            print("\n=== PRUEBA DE VOZ ===")
-            try:
-                print("1. Método estándar")
-                hablar("Esto es una prueba de voz con el método principal.")
-                
-                print("\n2. Método alternativo con SAPI5 directo")
-                engine_alt = pyttsx3.init(driverName='sapi5')
-                engine_alt.setProperty('rate', 120)
-                engine_alt.setProperty('volume', 1.0)
-                engine_alt.say("Prueba alternativa con SAPI5.")
-                engine_alt.runAndWait()
-                
-                print("\n3. Método con propiedades por defecto")
-                engine_def = pyttsx3.init()
-                engine_def.say("Prueba con propiedades por defecto.")
-                engine_def.runAndWait()
-                
-                print("Pruebas de voz completadas")
-            except Exception as e:
-                print(f"Error durante pruebas de voz: {e}")
