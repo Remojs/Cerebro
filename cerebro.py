@@ -1,5 +1,4 @@
 import sounddevice as sd
-import numpy as np
 import speech_recognition as sr
 import pyttsx3
 import keyboard
@@ -8,8 +7,15 @@ import time
 import ctypes
 import sys
 import os
+from llama_cpp import Llama
 
-# ===================== COMANDOS ===================== #
+# —————— Configuración de Llama v2 ——————
+llm = Llama(
+    model_path="models/llama-2-7b-chat.Q4_0.gguf",
+    n_threads=2
+)
+
+# —————— Comandos operativos ——————
 comandos = {
     "abrir visual studio":  r'"C:\Users\Gc\AppData\Local\Programs\Microsoft VS Code\Code.exe"',
     "abrir notas":          r"C:\Users\Gc\AppData\Local\Programs\Obsidian\Obsidian.exe",
@@ -19,83 +25,101 @@ comandos = {
     "reiniciar cerebro":    None
 }
 
-# ===================== VOZ ===================== #
-tts_engine = pyttsx3.init()
-tts_engine.setProperty(
-    'voice',
+# —————— Inicializar TTS en español ——————
+tts = pyttsx3.init()
+tts.setProperty('voice',
     'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_ES-MX_SABINA_11.0'
 )
-tts_engine.setProperty('rate', 120)
-tts_engine.setProperty('volume', 1.0)
-# 🔥 Pre-calentar TTS
-tts_engine.say("")
-tts_engine.runAndWait()
+tts.setProperty('rate', 120)
+tts.setProperty('volume', 1.0)
+# Precalentar para evitar silencio inicial
+tts.say("Cerebro 1.0 activado.")
+tts.runAndWait()
 
-def hablar(texto):
+def hablar(texto: str):
+    """Habla de forma sincrónica y lo imprime."""
     print(f"Cerebro: {texto}")
-    tts_engine.say(texto)
-    tts_engine.runAndWait()
+    tts.say(texto)
+    tts.runAndWait()
 
-# ===================== PRE-CALENTAR AUDIO ===================== #
-_sd_sr = 16000
-_sd_ch = 1
+# —————— Precalentar audio ——————
+_SD_SR = 16000
 try:
-    sd.rec(int(0.1 * _sd_sr), samplerate=_sd_sr, channels=_sd_ch)
+    sd.rec(int(0.1 * _SD_SR), samplerate=_SD_SR, channels=1)
     sd.wait()
-except Exception:
+except:
     pass
 
-# ===================== ESCUCHA ===================== #
-def escuchar_comando(duration=3, fs=_sd_sr):
-    hablar("Di tu comando.")
-    recording = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='int16')
-    sd.wait()
+# —————— Grabación y reconocimiento ——————
+def grabar(duration=3, fs=_SD_SR):
+    return sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='int16')
 
-    audio_data = sr.AudioData(recording.tobytes(), fs, 2)
+def reconocer(audio_bytes, fs=_SD_SR):
+    audio = sr.AudioData(audio_bytes, fs, 2)
     r = sr.Recognizer()
     try:
-        cmd = r.recognize_google(audio_data, language="es-ES").lower()
-        print(f"Escuchado: {cmd}")
-        return cmd
+        return r.recognize_google(audio, language="es-ES").lower()
     except sr.UnknownValueError:
-        hablar("No te entendí.")
+        return None
     except sr.RequestError:
         hablar("Error de servicio.")
-    return None
+        return None
 
-# ===================== MEDIA KEYS ===================== #
-def play_pause_media():
-    VK_MEDIA_PLAY_PAUSE = 0xB3
-    # key down
-    ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 0, 0)
-    time.sleep(0.1)
-    # key up
-    ctypes.windll.user32.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, 2, 0)
-
-# ===================== EJECUCIÓN ===================== #
-def ejecutar_comando(cmd):
-    if cmd and "reiniciar cerebro" in cmd:
-        hablar("Reiniciando Cerebro.")
-        os.execl(sys.executable, sys.executable, *sys.argv)
+# —————— Ejecutar comandos (F9) ——————
+def modo_comando():
+    hablar("Di tu comando.")
+    rec = grabar(duration=3)
+    sd.wait()
+    cmd = reconocer(rec.tobytes())
+    if not cmd:
+        hablar("No te entendí.")
         return
 
+    if "reiniciar cerebro" in cmd:
+        hablar("Reiniciando Cerebro.")
+        os.execl(sys.executable, sys.executable, *sys.argv)
+
     for key, action in comandos.items():
-        if action and key in (cmd or ""):
+        if action and key in cmd:
             hablar(f"Ejecutando {key}.")
             subprocess.run(action, shell=True)
-            # Si abrimos Spotify, forzamos play
             if key == "abrir spotify":
-                time.sleep(2)  # espera a que Spotify abra
-                play_pause_media()
+                time.sleep(2)
+                ctypes.windll.user32.keybd_event(0xB3, 0, 0, 0)
+                time.sleep(0.1)
+                ctypes.windll.user32.keybd_event(0xB3, 0, 2, 0)
             return
 
     hablar("Comando no reconocido.")
 
-# ===================== INICIO ===================== #
-if __name__ == "__main__":
-    hablar("Cerebro 1.0 activado.")
-    while True:
-        if keyboard.is_pressed("F9"):
-            cmd = escuchar_comando()
-            ejecutar_comando(cmd)
-            keyboard.wait("F9")
+# —————— Modo IA (F10) ——————
+def modo_ia():
+    hablar("¿Qué quieres preguntarle a la IA?")
+    rec = grabar(duration=5)
+    sd.wait()
+    pregunta = reconocer(rec.tobytes())
+    if not pregunta:
+        hablar("No entendí tu pregunta.")
+        return
+
+    hablar("Pensando…")
+    prompt = (
+        "Eres un asistente que siempre responde en español.\n"
+        f"Usuario: {pregunta}\nIA:"
+    )
+    salida = llm(prompt, max_tokens=128)
+    respuesta = salida['choices'][0]['text'].strip()
+    if respuesta:
+        hablar(respuesta)
+    else:
+        hablar("La IA no devolvió respuesta.")
+
+# —————— Bucle principal de escucha de teclas ——————
+hablar("Pulsa F9 para comandos o F10 para la IA.")
+while True:
+    evento = keyboard.read_event()
+    if evento.event_type == keyboard.KEY_DOWN:
+        if evento.name == "f9":
+            modo_comando()
+        elif evento.name == "f10":
+            modo_ia()
