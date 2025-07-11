@@ -13,17 +13,18 @@ from llama_cpp import Llama
 llm = Llama(
     model_path="models/llama-2-7b-chat.Q4_0.gguf",
     n_threads=2,
-    verbose=False  # <— aquí silenciamos los logs de repack
+    verbose=False
 )
 
 # —————— 2) Lista de comandos operativos ——————
 comandos = {
-    "abrir visual studio":  r'"C:\Users\Gc\AppData\Local\Programs\Microsoft VS Code\Code.exe"',
-    "abrir notas":          r"C:\Users\Gc\AppData\Local\Programs\Obsidian\Obsidian.exe",
-    "abrir ópera":          r'"C:\Users\Gc\AppData\Local\Programs\Opera GX\opera.exe"',
-    "abrir fifa":           r'"C:\Users\Gc\Desktop\FIFA Mod Manager.url"',
-    "abrir spotify":        r'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',  # Corregido: comillas de más
-    "reiniciar cerebro":    None
+    "abrir visual studio": r'"C:\Users\Gc\AppData\Local\Programs\Microsoft VS Code\Code.exe"',
+    "abrir notas":         r"C:\Users\Gc\AppData\Local\Programs\Obsidian\Obsidian.exe",
+    "abrir ópera":         r'"C:\Users\Gc\AppData\Local\Programs\Opera GX\opera.exe"',
+    "abrir fifa":          r'"C:\Users\Gc\Desktop\FIFA Mod Manager.url"',
+    "abrir spotify":       r'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
+        "abrir spotify":       r'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
+    "reiniciar cerebro":   None
 }
 
 # —————— 3) Funciones de TTS ——————
@@ -32,37 +33,28 @@ def listar_voces():
     return engine.getProperty('voices')
 
 def hablar(texto: str):
-    """Intenta reproducir texto por voz de la manera más eficiente posible."""
     print(f"Cerebro: {texto}")
     try:
-        # Método directo y sencillo
         engine = pyttsx3.init()
-        engine.setProperty('rate', 150)  # Un poco más rápido para mayor agilidad
+        engine.setProperty('rate', 150)
         engine.setProperty('volume', 1.0)
-        
-        # Intentar establecer una voz en español
-        voices = engine.getProperty('voices')
-        for voice in voices:
+        for voice in engine.getProperty('voices'):
             if "spanish" in voice.name.lower() or "español" in voice.name.lower():
                 engine.setProperty('voice', voice.id)
                 break
-                
-        # Reproducir
         engine.say(texto)
         engine.runAndWait()
     except Exception as e:
         print(f"Error de voz: {e}")
-        
-# Probar voces disponibles (solo imprime en consola, no afecta la operación)
+
+# Diagnóstico inicial de voces
 try:
-    voices = listar_voces()
-    print(f"Voces disponibles: {len(voices)}")
-    if len(voices) > 0:
-        print(f"Primera voz: {voices[0].name}")
+    voces = listar_voces()
+    print(f"Voces disponibles: {len(voces)}")
+    if voces:
+        print(f"Primera voz: {voces[0].name}")
 except:
     print("No se pudieron listar las voces")
-
-# Ejecutar diagnóstico de voces al inicio
 print("Iniciando asistente...")
 
 # —————— 4) Precalentar audio micro ——————
@@ -74,7 +66,7 @@ except:
     pass
 
 # —————— 5) Grabación y reconocimiento ——————
-def grabar(segundos=1.5):  # Reducido de 3 a 1.5 segundos
+def grabar(segundos=2.5):
     return sd.rec(int(segundos * _SR), samplerate=_SR, channels=1, dtype='int16')
 
 def reconocer(audio_bytes):
@@ -91,15 +83,13 @@ def reconocer(audio_bytes):
 # —————— 6) Modo Comando (F9) ——————
 def modo_comando():
     print("Escuchando comando...")
-    rec = grabar(1.5)  # Reducido a 1.5 segundos
-    sd.wait()
+    rec = grabar(2.5); sd.wait()
     cmd = reconocer(rec.tobytes())
     if not cmd:
         print("No se reconoció ningún comando")
         return
 
     print(f"Comando reconocido: {cmd}")
-    
     if "reiniciar cerebro" in cmd:
         print("Reiniciando Cerebro.")
         os.execl(sys.executable, sys.executable, *sys.argv)
@@ -120,43 +110,34 @@ def modo_comando():
 
 # —————— 7) Modo IA (F10) ——————
 def modo_ia():
-    try:
-        hablar("¿Qué necesitas?")  # Mensaje corto y directo
-        rec = grabar(2)  # Reducido de 5 a 2 segundos
-        sd.wait()
-        pregunta = reconocer(rec.tobytes())
-        if not pregunta:
-            print("No se reconoció la pregunta")
-            return
+    hablar("¿Qué necesitas?")
+    rec = grabar(2); sd.wait()
+    pregunta = reconocer(rec.tobytes())
+    if not pregunta:
+        hablar("No entendí tu pregunta.")
+        return
 
-        print(f"Procesando pregunta: {pregunta}")
-        
-        # Prompt simplificado
-        prompt = (
-            "Eres un asistente experto que siempre RESPONDE en español.\n"
-            f"Usuario: {pregunta}\n"
-            "IA:"
-        )
-        
-        resp = llm(prompt, max_tokens=128)
-        texto = resp['choices'][0]['text'].strip()
-        
-        if texto:
-            print(f"\nRespuesta IA: {texto}")
-            hablar(texto)  # Respuesta por voz
-        else:
-            print("No se obtuvo respuesta")
-    except Exception as e:
-        print(f"Error: {e}")
-
+    print(f"Procesando pregunta: {pregunta}")
+    
+    # Flujo normal de IA
+    hablar("Pensando…")
+    prompt = (
+        "Eres un asistente experto que siempre RESPONDE en español.\n"
+        f"Usuario: {pregunta}\nIA:"
+    )
+    resp = llm(prompt, max_tokens=128)
+    texto = resp["choices"][0]["text"].strip()
+    if texto:
+        print(f"Respuesta IA: {texto}")
+        hablar(texto)
+    else:
+        hablar("La IA no devolvió respuesta.")
 # —————— 8) Bucle de teclas ——————
-print("Asistente listo. F9=Comandos, F10=IA")
-hablar("Listo")
-
+hablar("Cerebro Activado")
 while True:
-    evento = keyboard.read_event()
-    if evento.event_type == keyboard.KEY_DOWN:
-        if evento.name == "f9":
+    ev = keyboard.read_event()
+    if ev.event_type == keyboard.KEY_DOWN:
+        if ev.name == "f9":
             modo_comando()
-        elif evento.name == "f10":
+        elif ev.name == "f10":
             modo_ia()
