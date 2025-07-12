@@ -8,6 +8,14 @@ import ctypes
 import sys
 import os
 from llama_cpp import Llama
+from paths import BASE_USER_PATH
+
+# Construcción de rutas específicas
+VISUAL_STUDIO_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
+OBSIDIAN_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Obsidian\\Obsidian.exe"
+OPERA_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Opera GX\\opera.exe"
+FIFA_MANAGER_PATH = BASE_USER_PATH + r"Desktop\\FIFA Mod Manager.url"
+DISCORD_PATH = BASE_USER_PATH + r"AppData\\Local\\Discord\\app-1.0.9003\\Discord.exe"
 
 # —————— 1) Configuración de Llama v2 (silencioso) ——————
 llm = Llama(
@@ -18,13 +26,30 @@ llm = Llama(
 
 # —————— 2) Lista de comandos operativos ——————
 comandos = {
-    "abrir visual studio": r'"C:\Users\Gc\AppData\Local\Programs\Microsoft VS Code\Code.exe"',
-    "abrir notas":         r"C:\Users\Gc\AppData\Local\Programs\Obsidian\Obsidian.exe",
-    "abrir ópera":         r'"C:\Users\Gc\AppData\Local\Programs\Opera GX\opera.exe"',
-    "abrir fifa":          r'"C:\Users\Gc\Desktop\FIFA Mod Manager.url"',
-    "abrir spotify":       r'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
-        "abrir spotify":       r'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
-    "reiniciar cerebro":   None
+    "abrir visual studio": f'"{VISUAL_STUDIO_PATH}"',
+    "abrir notas": f'"{OBSIDIAN_PATH}"',
+    "abrir ópera": f'"{OPERA_PATH}"',
+    "abrir fifa": f'"{FIFA_MANAGER_PATH}"',
+    "abrir spotify": 'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
+    "reiniciar cerebro": None
+}
+
+# —————— 2.1) Definición de modos preconfigurados ——————
+modos = {
+    "juego": [
+        r'"C:\\Program Files (x86)\\Steam\\steam.exe"',
+        f'"{DISCORD_PATH}"'
+    ],
+    "programación": [
+        f'"{VISUAL_STUDIO_PATH}"',
+        f'"{OPERA_PATH}"',
+        f'"{OBSIDIAN_PATH}"'
+    ],
+    "estudio": [
+        f'"{OBSIDIAN_PATH}"',
+        f'"{OPERA_PATH}"',
+        f'"{DISCORD_PATH}"'
+    ]
 }
 
 # —————— 3) Funciones de TTS ——————
@@ -82,22 +107,22 @@ def reconocer(audio_bytes):
 
 # —————— 6) Modo Comando (F9) ——————
 def modo_comando():
-    print("Escuchando comando...")
+    hablar("Di tu comando.")
     rec = grabar(2.5); sd.wait()
     cmd = reconocer(rec.tobytes())
     if not cmd:
-        print("No se reconoció ningún comando")
+        hablar("No se reconoció ningún comando.")
         return
 
     print(f"Comando reconocido: {cmd}")
     if "reiniciar cerebro" in cmd:
-        print("Reiniciando Cerebro.")
+        hablar("Reiniciando Cerebro.")
         os.execl(sys.executable, sys.executable, *sys.argv)
         return
 
     for k, action in comandos.items():
         if action and k in cmd:
-            print(f"Ejecutando: {k}")
+            hablar(f"Ejecutando {k}.")
             subprocess.run(action, shell=True)
             if k == "abrir spotify":
                 time.sleep(2)
@@ -106,9 +131,32 @@ def modo_comando():
                 ctypes.windll.user32.keybd_event(0xB3, 0, 2, 0)
             return
 
-    print("Comando no reconocido.")
+    hablar("Comando no reconocido.")
 
-# —————— 7) Modo IA (F10) ——————
+# —————— 7) Función para lanzar múltiples apps (modos) ——————
+def modo_multiple(nombre: str):
+    apps = modos.get(nombre, [])
+    if not apps:
+        hablar(f"No existe el modo «{nombre}».")
+        return
+    hablar(f"Iniciando modo {nombre}.")
+    for ruta in apps:
+        subprocess.Popen(ruta, shell=True)
+        time.sleep(1)
+    hablar(f"Modo {nombre} listo.")
+
+# —————— 8) Selección de modo por voz (F8) ——————
+def modo_por_voz():
+    hablar("Dime el modo que quieres activar.")
+    rec = grabar(3); sd.wait()
+    modo = reconocer(rec.tobytes())
+    if not modo:
+        hablar("No te escuché bien.")
+        return
+    modo = modo.lower()
+    modo_multiple(modo)
+
+# —————— 9) Modo IA (F10) ——————
 def modo_ia():
     hablar("¿Qué necesitas?")
     rec = grabar(2); sd.wait()
@@ -118,8 +166,6 @@ def modo_ia():
         return
 
     print(f"Procesando pregunta: {pregunta}")
-    
-    # Flujo normal de IA
     hablar("Pensando…")
     prompt = (
         "Eres un asistente experto que siempre RESPONDE en español.\n"
@@ -132,8 +178,9 @@ def modo_ia():
         hablar(texto)
     else:
         hablar("La IA no devolvió respuesta.")
-# —————— 8) Bucle de teclas ——————
-hablar("Cerebro Activado")
+
+# —————— 10) Bucle de teclas con modos ——————
+hablar("Cerebro Activado. F9=comandos, F10=IA, F8=activar modo por voz.")
 while True:
     ev = keyboard.read_event()
     if ev.event_type == keyboard.KEY_DOWN:
@@ -141,3 +188,5 @@ while True:
             modo_comando()
         elif ev.name == "f10":
             modo_ia()
+        elif ev.name == "f8":
+            modo_por_voz()
