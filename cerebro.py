@@ -1,40 +1,44 @@
 import sounddevice as sd
 import speech_recognition as sr
-import pyttsx3
 import keyboard
 import subprocess
 import time
 import ctypes
 import sys
 import os
+import uuid
+import asyncio
+import edge_tts
+from playsound import playsound
 from llama_cpp import Llama
 from paths import BASE_USER_PATH
+from ia_context import contexto_ia
 
-# Construcción de rutas específicas
+# —————— Rutas a aplicaciones ——————
 VISUAL_STUDIO_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
-OBSIDIAN_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Obsidian\\Obsidian.exe"
-OPERA_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Opera GX\\opera.exe"
-FIFA_MANAGER_PATH = BASE_USER_PATH + r"Desktop\\FIFA Mod Manager.url"
-DISCORD_PATH = BASE_USER_PATH + r"AppData\\Local\\Discord\\app-1.0.9003\\Discord.exe"
+OBSIDIAN_PATH      = BASE_USER_PATH + r"AppData\\Local\\Programs\\Obsidian\\Obsidian.exe"
+OPERA_PATH         = BASE_USER_PATH + r"AppData\\Local\\Programs\\Opera GX\\opera.exe"
+FIFA_MANAGER_PATH  = BASE_USER_PATH + r"Desktop\\FIFA Mod Manager.url"
+DISCORD_PATH       = BASE_USER_PATH + r"AppData\\Local\\Discord\\app-1.0.9003\\Discord.exe"
 
-# —————— 1) Configuración de Llama v2 (silencioso) ——————
+# —————— 1) Configuración de Llama v2 ——————
 llm = Llama(
     model_path="models/llama-2-7b-chat.Q4_0.gguf",
     n_threads=2,
     verbose=False
 )
 
-# —————— 2) Lista de comandos operativos ——————
+# —————— 2) Comandos operativos ——————
 comandos = {
     "abrir visual studio": f'"{VISUAL_STUDIO_PATH}"',
-    "abrir notas": f'"{OBSIDIAN_PATH}"',
-    "abrir ópera": f'"{OPERA_PATH}"',
-    "abrir fifa": f'"{FIFA_MANAGER_PATH}"',
-    "abrir spotify": 'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
-    "reiniciar cerebro": None
+    "abrir notas":         f'"{OBSIDIAN_PATH}"',
+    "abrir ópera":         f'"{OPERA_PATH}"',
+    "abrir fifa":          f'"{FIFA_MANAGER_PATH}"',
+    "abrir spotify":       'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
+    "reiniciar cerebro":   None
 }
 
-# —————— 2.1) Definición de modos preconfigurados ——————
+# —————— 2.1) Modos preconfigurados ——————
 modos = {
     "juego": [
         r'"C:\\Program Files (x86)\\Steam\\steam.exe"',
@@ -52,37 +56,27 @@ modos = {
     ]
 }
 
-# —————— 3) Funciones de TTS ——————
-def listar_voces():
-    engine = pyttsx3.init()
-    return engine.getProperty('voices')
+# —————— 3) Función TTS con edge-tts ——————
+VOICE = "es-US-AlonsoNeural"  # Voz masculina y profunda en español
+
+async def _generate_tts(text: str, filename: str):
+    communicate = edge_tts.Communicate(text, VOICE)
+    await communicate.save(filename)
 
 def hablar(texto: str):
+    """Sintetiza y reproduce texto en español con Edge-TTS + playsound."""
     print(f"Cerebro: {texto}")
+    temp_file = f"{uuid.uuid4()}.mp3"
     try:
-        engine = pyttsx3.init()
-        engine.setProperty('rate', 150)
-        engine.setProperty('volume', 1.0)
-        for voice in engine.getProperty('voices'):
-            if "spanish" in voice.name.lower() or "español" in voice.name.lower():
-                engine.setProperty('voice', voice.id)
-                break
-        engine.say(texto)
-        engine.runAndWait()
+        asyncio.run(_generate_tts(texto, temp_file))
+        playsound(temp_file)
     except Exception as e:
-        print(f"Error de voz: {e}")
+        print(f"Error TTS: {e}")
+    finally:
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
 
-# Diagnóstico inicial de voces
-try:
-    voces = listar_voces()
-    print(f"Voces disponibles: {len(voces)}")
-    if voces:
-        print(f"Primera voz: {voces[0].name}")
-except:
-    print("No se pudieron listar las voces")
-print("Iniciando asistente...")
-
-# —————— 4) Precalentar audio micro ——————
+# —————— 4) Precalentar audio ——————
 _SR = 16000
 try:
     sd.rec(int(0.1 * _SR), samplerate=_SR, channels=1)
@@ -102,7 +96,7 @@ def reconocer(audio_bytes):
     except sr.UnknownValueError:
         return None
     except sr.RequestError:
-        print("Error de servicio de reconocimiento de voz.")
+        print("Error de servicio de reconocimiento.")
         return None
 
 # —————— 6) Modo Comando (F9) ——————
@@ -114,7 +108,6 @@ def modo_comando():
         hablar("No se reconoció ningún comando.")
         return
 
-    print(f"Comando reconocido: {cmd}")
     if "reiniciar cerebro" in cmd:
         hablar("Reiniciando Cerebro.")
         os.execl(sys.executable, sys.executable, *sys.argv)
@@ -133,7 +126,7 @@ def modo_comando():
 
     hablar("Comando no reconocido.")
 
-# —————— 7) Función para lanzar múltiples apps (modos) ——————
+# —————— 7) Lanza múltiples apps por modo ——————
 def modo_multiple(nombre: str):
     apps = modos.get(nombre, [])
     if not apps:
@@ -153,7 +146,6 @@ def modo_por_voz():
     if not modo:
         hablar("No te escuché bien.")
         return
-    modo = modo.lower()
     modo_multiple(modo)
 
 # —————— 9) Modo IA (F10) ——————
@@ -165,28 +157,23 @@ def modo_ia():
         hablar("No entendí tu pregunta.")
         return
 
-    print(f"Procesando pregunta: {pregunta}")
-    hablar("Pensando…")
-    prompt = (
-        "Eres un asistente experto que siempre RESPONDE en español.\n"
-        f"Usuario: {pregunta}\nIA:"
-    )
+    prompt = contexto_ia + "\nUsuario: " + pregunta + "\nIA:"
     resp = llm(prompt, max_tokens=128)
     texto = resp["choices"][0]["text"].strip()
     if texto:
-        print(f"Respuesta IA: {texto}")
         hablar(texto)
     else:
         hablar("La IA no devolvió respuesta.")
 
-# —————— 10) Bucle de teclas con modos ——————
-hablar("Cerebro Activado. F9=comandos, F10=IA, F8=activar modo por voz.")
-while True:
-    ev = keyboard.read_event()
-    if ev.event_type == keyboard.KEY_DOWN:
-        if ev.name == "f9":
-            modo_comando()
-        elif ev.name == "f10":
-            modo_ia()
-        elif ev.name == "f8":
-            modo_por_voz()
+# —————— 10) Bucle principal ——————
+if __name__ == "__main__":
+    hablar("Cerebro activado.")
+    while True:
+        ev = keyboard.read_event()
+        if ev.event_type == keyboard.KEY_DOWN:
+            if ev.name == "f9":
+                modo_comando()
+            elif ev.name == "f8":
+                modo_por_voz()
+            elif ev.name == "f10":
+                modo_ia()
