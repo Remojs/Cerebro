@@ -1,18 +1,16 @@
 import sounddevice as sd
 import speech_recognition as sr
+import pyttsx3
 import keyboard
 import subprocess
 import time
 import ctypes
 import sys
 import os
-import uuid
-import asyncio
-import edge_tts
-from playsound import playsound
+import winsound             # para el beep en F9
 from llama_cpp import Llama
-from paths import BASE_USER_PATH
-from ia_context import contexto_ia
+from utils.paths import BASE_USER_PATH
+from utils.ia_context import contexto_ia
 
 # —————— Rutas a aplicaciones ——————
 VISUAL_STUDIO_PATH = BASE_USER_PATH + r"AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"
@@ -40,43 +38,39 @@ comandos = {
 
 # —————— 2.1) Modos preconfigurados ——————
 modos = {
-    "juego": [
+    "modo juego": [
         r'"C:\\Program Files (x86)\\Steam\\steam.exe"',
         f'"{DISCORD_PATH}"'
     ],
-    "programación": [
+    "modo programación": [
         f'"{VISUAL_STUDIO_PATH}"',
         f'"{OPERA_PATH}"',
         f'"{OBSIDIAN_PATH}"'
     ],
-    "estudio": [
+    "modo estudio": [
         f'"{OBSIDIAN_PATH}"',
         f'"{OPERA_PATH}"',
         f'"{DISCORD_PATH}"'
     ]
 }
 
-# —————— 3) Función TTS con edge-tts ——————
-VOICE = "es-US-AlonsoNeural"  # Voz masculina y profunda en español
-
-async def _generate_tts(text: str, filename: str):
-    communicate = edge_tts.Communicate(text, VOICE)
-    await communicate.save(filename)
+# —————— 3) Inicializar TTS por defecto y voz en español ——————
+tts_engine = pyttsx3.init()
+tts_engine.setProperty('rate', 140)
+tts_engine.setProperty('volume', 1.0)
+# elegir voz en español si está instalada
+for v in tts_engine.getProperty('voices'):
+    if "spanish" in v.name.lower() or "español" in v.name.lower():
+        tts_engine.setProperty('voice', v.id)
+        break
 
 def hablar(texto: str):
-    """Sintetiza y reproduce texto en español con Edge-TTS + playsound."""
+    """Habla de forma síncrona y lo imprime."""
     print(f"Cerebro: {texto}")
-    temp_file = f"{uuid.uuid4()}.mp3"
-    try:
-        asyncio.run(_generate_tts(texto, temp_file))
-        playsound(temp_file)
-    except Exception as e:
-        print(f"Error TTS: {e}")
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
+    tts_engine.say(texto)
+    tts_engine.runAndWait()
 
-# —————— 4) Precalentar audio ——————
+# —————— 4) Precalentar audio micro ——————
 _SR = 16000
 try:
     sd.rec(int(0.1 * _SR), samplerate=_SR, channels=1)
@@ -101,11 +95,15 @@ def reconocer(audio_bytes):
 
 # —————— 6) Modo Comando (F9) ——————
 def modo_comando():
-    hablar("Di tu comando.")
-    rec = grabar(2.5); sd.wait()
+    # beep rápido para indicar “listening”
+    winsound.Beep(1000, 150)  # frecuencia 1kHz, duración 150ms
+
+    rec = grabar(2.0)
+    sd.wait()
     cmd = reconocer(rec.tobytes())
+
     if not cmd:
-        hablar("No se reconoció ningún comando.")
+        hablar("No reconocí nada.")
         return
 
     if "reiniciar cerebro" in cmd:
@@ -117,6 +115,7 @@ def modo_comando():
         if action and k in cmd:
             hablar(f"Ejecutando {k}.")
             subprocess.run(action, shell=True)
+            # forzar play en Spotify
             if k == "abrir spotify":
                 time.sleep(2)
                 ctypes.windll.user32.keybd_event(0xB3, 0, 0, 0)
@@ -126,7 +125,7 @@ def modo_comando():
 
     hablar("Comando no reconocido.")
 
-# —————— 7) Lanza múltiples apps por modo ——————
+# —————— 7) Lanzar múltiples apps por modo ——————
 def modo_multiple(nombre: str):
     apps = modos.get(nombre, [])
     if not apps:
@@ -140,8 +139,9 @@ def modo_multiple(nombre: str):
 
 # —————— 8) Selección de modo por voz (F8) ——————
 def modo_por_voz():
-    hablar("Dime el modo que quieres activar.")
-    rec = grabar(3); sd.wait()
+    hablar("Dime el modo.")
+    rec = grabar(2.5)
+    sd.wait()
     modo = reconocer(rec.tobytes())
     if not modo:
         hablar("No te escuché bien.")
@@ -151,12 +151,14 @@ def modo_por_voz():
 # —————— 9) Modo IA (F10) ——————
 def modo_ia():
     hablar("¿Qué necesitas?")
-    rec = grabar(2); sd.wait()
+    rec = grabar(2.5)
+    sd.wait()
     pregunta = reconocer(rec.tobytes())
     if not pregunta:
         hablar("No entendí tu pregunta.")
         return
 
+    hablar("Pensando…")
     prompt = contexto_ia + "\nUsuario: " + pregunta + "\nIA:"
     resp = llm(prompt, max_tokens=128)
     texto = resp["choices"][0]["text"].strip()
