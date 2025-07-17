@@ -33,6 +33,9 @@ comandos = {
     "abrir ópera":         f'"{OPERA_PATH}"',
     "abrir fifa":          f'"{FIFA_MANAGER_PATH}"',
     "abrir spotify":       'start spotify:playlist:6YWYdE2ZE0Wc5KlgdhvAJe',
+    "abrir photoshop":     f'"{BASE_USER_PATH}AppData\\Local\\Programs\\Adobe\\Adobe Photoshop 2023\\Photoshop.exe"',
+    "abrir steam":         r'"C:\Program Files (x86)\Steam\steam.exe"',
+    "abrir gpt":           'start https://chat.openai.com',
     "reiniciar cerebro":   None
 }
 
